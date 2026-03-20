@@ -103,6 +103,23 @@ def get_alert(
     return alert
 
 
+@router.delete("/alerts/{alert_id}", status_code=status.HTTP_200_OK)
+def delete_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found",
+        )
+
+    db.delete(alert)
+    db.commit()
+    return {"status": "deleted", "id": alert_id}
+
+
 @router.get("/alerts/{alert_id}/video")
 def get_alert_video(
     alert_id: int,
