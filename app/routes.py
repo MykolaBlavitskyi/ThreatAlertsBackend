@@ -50,9 +50,12 @@ def create_alert(
     db: Session = Depends(get_db),
 ) -> AlertResponse:
     alert = Alert(
+        camera_id=payload.camera_id,
         threat_type=payload.threat_type,
         detected_at=payload.detected_at,
         video_path=payload.video_path,
+        preview_image_path=payload.preview_image_path,
+        status=payload.status or "new",
     )
     db.add(alert)
     db.commit()
@@ -65,6 +68,8 @@ def list_alerts(
     from_datetime: Optional[datetime] = None,
     to_datetime: Optional[datetime] = None,
     threat_type: Optional[str] = None,
+    status: Optional[str] = None,
+    camera_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ) -> AlertListResponse:
     query = db.query(Alert)
@@ -75,6 +80,10 @@ def list_alerts(
         query = query.filter(Alert.detected_at <= to_datetime)
     if threat_type:
         query = query.filter(Alert.threat_type == threat_type)
+    if status:
+        query = query.filter(Alert.status == status)
+    if camera_id is not None:
+        query = query.filter(Alert.camera_id == camera_id)
 
     alerts = query.order_by(Alert.detected_at.desc()).all()
     return AlertListResponse(alerts=alerts)
