@@ -109,3 +109,18 @@ class ActivationCodeAdminItem(BaseModel):
 class ActivationCodeAdminListResponse(BaseModel):
     activation_codes: List[ActivationCodeAdminItem]
 
+
+class DeviceAdminItem(BaseModel):
+    id: int
+    tenant_id: Optional[int] = None
+    fcm_token: str
+    name: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class DeviceAdminListResponse(BaseModel):
+    devices: List[DeviceAdminItem]
+

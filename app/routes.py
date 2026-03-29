@@ -22,6 +22,7 @@ from .schemas import (
     CameraCreateRequest,
     CameraListResponse,
     CameraResponse,
+    DeviceAdminListResponse,
     DeviceRegisterRequest,
     DeviceResponse,
     TenantAdminListResponse,
@@ -263,4 +264,20 @@ def admin_list_tenants(db: Session = Depends(get_db)) -> TenantAdminListResponse
 def admin_list_activation_codes(db: Session = Depends(get_db)) -> ActivationCodeAdminListResponse:
     rows = db.query(ActivationCode).order_by(ActivationCode.created_at.desc()).all()
     return ActivationCodeAdminListResponse(activation_codes=rows)
+
+
+def _list_all_devices(db: Session) -> DeviceAdminListResponse:
+    rows = db.query(Device).order_by(Device.id.asc()).all()
+    return DeviceAdminListResponse(devices=rows)
+
+
+@router.get("/admin/devices", response_model=DeviceAdminListResponse)
+def admin_list_devices(db: Session = Depends(get_db)) -> DeviceAdminListResponse:
+    return _list_all_devices(db)
+
+
+@router.get("/devices", response_model=DeviceAdminListResponse)
+def list_devices_alias(db: Session = Depends(get_db)) -> DeviceAdminListResponse:
+    """Той самий JSON, що /api/admin/devices — для fallback у фронті."""
+    return _list_all_devices(db)
 
