@@ -79,3 +79,33 @@ class CameraResponse(BaseModel):
 class CameraListResponse(BaseModel):
     cameras: List[CameraResponse]
 
+
+class TenantAdminItem(BaseModel):
+    id: int
+    api_token: str
+    active: bool
+    paid_until: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TenantAdminListResponse(BaseModel):
+    tenants: List[TenantAdminItem]
+
+
+class ActivationCodeAdminItem(BaseModel):
+    code: str
+    expires_at: datetime
+    used_at: Optional[datetime] = None
+    tenant_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ActivationCodeAdminListResponse(BaseModel):
+    activation_codes: List[ActivationCodeAdminItem]
+
