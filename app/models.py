@@ -5,6 +5,16 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from .database import Base
 
 
+class Camera(Base):
+    __tablename__ = "cameras"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, default="Camera")
+    location = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
