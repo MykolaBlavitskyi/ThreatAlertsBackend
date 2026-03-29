@@ -31,13 +31,14 @@ class AlertCreateRequest(BaseModel):
 
 class AlertResponse(BaseModel):
     id: int
+    tenant_id: Optional[int] = None
     camera_id: Optional[int]
     threat_type: str
     detected_at: datetime
     video_path: str
     preview_image_path: Optional[str]
-    status: str
-    created_at: datetime
+    status: Optional[str] = "new"
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
