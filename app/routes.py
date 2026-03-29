@@ -1,4 +1,5 @@
 from datetime import datetime
+import secrets
 from pathlib import Path
 from typing import List, Optional
 
@@ -7,8 +8,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
-from .models import Alert, Device
+from .models import ActivationCode, Alert, Device, Tenant
 from .schemas import (
+    ActivateRequest,
+    ActivateResponse,
     AlertCreateRequest,
     AlertListResponse,
     AlertResponse,
@@ -20,6 +23,30 @@ from .schemas import (
 Base.metadata.create_all(bind=engine)
 
 router = APIRouter()
+
+
+@router.post("/activate", response_model=ActivateResponse)
+def activate(payload: ActivateRequest, db: Session = Depends(get_db)) -> ActivateResponse:
+    code_value = payload.code.strip()
+    code = db.query(ActivationCode).filter(ActivationCode.code == code_value).first()
+    if not code:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid code")
+    if code.used_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code already used")
+    if code.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code expired")
+
+    token = secrets.token_urlsafe(32)
+    tenant = Tenant(api_token=token, active=1, paid_until=None)
+    db.add(tenant)
+    db.commit()
+    db.refresh(tenant)
+
+    code.used_at = datetime.utcnow()
+    code.tenant_id = tenant.id
+    db.commit()
+
+    return ActivateResponse(api_token=tenant.api_token, active=True, paid_until=tenant.paid_until)
 
 
 @router.post("/device/register", response_model=DeviceResponse)

@@ -45,3 +45,13 @@ class AlertResponse(BaseModel):
 class AlertListResponse(BaseModel):
     alerts: List[AlertResponse]
 
+
+class ActivateRequest(BaseModel):
+    code: str
+
+
+class ActivateResponse(BaseModel):
+    api_token: str
+    active: bool
+    paid_until: Optional[datetime] = None
+
