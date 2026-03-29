@@ -15,6 +15,7 @@ from .push import send_alert_push
 from .schemas import (
     ActivateRequest,
     ActivateResponse,
+    ActivationCodeAdminListResponse,
     AlertCreateRequest,
     AlertListResponse,
     AlertResponse,
@@ -23,6 +24,7 @@ from .schemas import (
     CameraResponse,
     DeviceRegisterRequest,
     DeviceResponse,
+    TenantAdminListResponse,
 )
 
 
@@ -251,4 +253,16 @@ def get_alert_video(
         media_type="video/mp4",
         filename=video_path.name,
     )
+
+
+@router.get("/admin/tenants", response_model=TenantAdminListResponse)
+def admin_list_tenants(db: Session = Depends(get_db)) -> TenantAdminListResponse:
+    rows = db.query(Tenant).order_by(Tenant.id.asc()).all()
+    return TenantAdminListResponse(tenants=rows)
+
+
+@router.get("/admin/activation-codes", response_model=ActivationCodeAdminListResponse)
+def admin_list_activation_codes(db: Session = Depends(get_db)) -> ActivationCodeAdminListResponse:
+    rows = db.query(ActivationCode).order_by(ActivationCode.created_at.desc()).all()
+    return ActivationCodeAdminListResponse(activation_codes=rows)
 
