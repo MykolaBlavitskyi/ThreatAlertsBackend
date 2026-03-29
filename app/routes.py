@@ -123,6 +123,21 @@ def create_alert(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid tenant_id",
             )
+
+    # Якщо задано camera_id — перевіряємо, що камера існує і належить цьому tenant (коли tenant_id відомий)
+    if payload.camera_id is not None:
+        cam = db.query(Camera).filter(Camera.id == payload.camera_id).first()
+        if not cam:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid camera_id",
+            )
+        if tenant_id is not None and cam.tenant_id != tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="camera_id does not belong to this tenant",
+            )
+
     alert = Alert(
         # якщо є Bearer token — прив'язуємо до цього tenant
         tenant_id=tenant_id,
@@ -167,6 +182,7 @@ def list_alerts(
     if status:
         query = query.filter(Alert.status == status)
     if camera_id is not None:
+        # камера_id фільтрує тільки в межах tenant (бо query вже tenant-scoped)
         query = query.filter(Alert.camera_id == camera_id)
 
     alerts = query.order_by(Alert.detected_at.desc()).all()
