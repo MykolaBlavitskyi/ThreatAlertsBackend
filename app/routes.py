@@ -98,12 +98,10 @@ def register_device(
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> DeviceResponse:
-    device = (
-        db.query(Device)
-        .filter(Device.fcm_token == payload.fcm_token, Device.tenant_id == tenant.id)
-        .first()
-    )
+    # fcm_token унікальний глобально в БД — шукаємо лише по токену, інакше INSERT дублює ключ
+    device = db.query(Device).filter(Device.fcm_token == payload.fcm_token).first()
     if device:
+        device.tenant_id = tenant.id
         device.name = payload.name
     else:
         device = Device(tenant_id=tenant.id, fcm_token=payload.fcm_token, name=payload.name)
