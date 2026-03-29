@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from .auth import get_current_tenant, get_optional_tenant
 from .database import Base, engine, get_db
 from .models import ActivationCode, Alert, Camera, Device, Tenant
+from .push import send_alert_push
 from .schemas import (
     ActivateRequest,
     ActivateResponse,
@@ -63,11 +64,18 @@ def activate(payload: ActivateRequest, db: Session = Depends(get_db)) -> Activat
     code = db.query(ActivationCode).filter(ActivationCode.code == code_value).first()
     if not code:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid code")
-    if code.used_at is not None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code already used")
     now = datetime.now(timezone.utc)
     if code.expires_at < now:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code expired")
+
+    # Якщо код вже використали — повертаємо той самий tenant api_token (щоб можна було "зайти знову")
+    if code.used_at is not None:
+        if code.tenant_id is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code already used")
+        tenant = db.query(Tenant).filter(Tenant.id == code.tenant_id).first()
+        if not tenant:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code already used")
+        return ActivateResponse(api_token=tenant.api_token, active=tenant.active, paid_until=tenant.paid_until)
 
     token = secrets.token_urlsafe(32)
     tenant = Tenant(api_token=token, active=True, paid_until=None)
@@ -158,6 +166,16 @@ def create_alert(
             detail="Invalid foreign key value",
         )
     db.refresh(alert)
+
+    # Push only to devices of this tenant (if configured)
+    if tenant_id is not None:
+        tokens = [d.fcm_token for d in db.query(Device).filter(Device.tenant_id == tenant_id).all()]
+        send_alert_push(
+            tokens,
+            alert_id=alert.id,
+            threat_type=alert.threat_type,
+            detected_at_iso=alert.detected_at.isoformat(),
+        )
     return alert
 
 
