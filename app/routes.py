@@ -5,9 +5,10 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .auth import get_current_tenant
+from .auth import get_current_tenant, get_optional_tenant
 from .database import Base, engine, get_db
 from .models import ActivationCode, Alert, Device, Tenant
 from .schemas import (
@@ -81,11 +82,20 @@ def get_device_tokens(db: Session = Depends(get_db)) -> List[str]:
 @router.post("/alerts", response_model=AlertResponse, status_code=status.HTTP_201_CREATED)
 def create_alert(
     payload: AlertCreateRequest,
+    tenant: Optional[Tenant] = Depends(get_optional_tenant),
     db: Session = Depends(get_db),
 ) -> AlertResponse:
+    tenant_id = tenant.id if tenant else getattr(payload, "tenant_id", None)
+    if tenant_id is not None:
+        exists = db.query(Tenant.id).filter(Tenant.id == tenant_id).first()
+        if not exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid tenant_id",
+            )
     alert = Alert(
-        # для MVP tenant_id можна передавати окремо (пізніше зробимо service-token або auth)
-        tenant_id=getattr(payload, "tenant_id", None),
+        # якщо є Bearer token — прив'язуємо до цього tenant
+        tenant_id=tenant_id,
         camera_id=payload.camera_id,
         threat_type=payload.threat_type,
         detected_at=payload.detected_at,
@@ -94,7 +104,14 @@ def create_alert(
         status=payload.status or "new",
     )
     db.add(alert)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid foreign key value",
+        )
     db.refresh(alert)
     return alert
 

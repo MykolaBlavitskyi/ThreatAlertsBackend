@@ -45,3 +45,21 @@ def get_current_tenant(
 
     return tenant
 
+
+def get_optional_tenant(
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> Optional[Tenant]:
+    if not creds or not creds.credentials:
+        return None
+    token = creds.credentials
+    tenant = db.query(Tenant).filter(Tenant.api_token == token).first()
+    if not tenant:
+        return None
+    if not tenant.active:
+        return None
+    now = datetime.now(timezone.utc)
+    if tenant.paid_until and tenant.paid_until < now:
+        return None
+    return tenant
+
