@@ -20,6 +20,7 @@ class DeviceResponse(BaseModel):
 
 
 class AlertCreateRequest(BaseModel):
+    tenant_id: Optional[int] = None
     camera_id: Optional[int] = None
     threat_type: str
     detected_at: datetime

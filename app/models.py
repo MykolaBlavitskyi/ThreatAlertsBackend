@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 
 from .database import Base
 
@@ -10,7 +10,7 @@ class Tenant(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     api_token = Column(String, unique=True, index=True, nullable=False)
-    active = Column(Integer, nullable=False, default=1)
+    active = Column(Boolean, nullable=False, default=True)
     paid_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

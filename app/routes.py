@@ -1,5 +1,5 @@
-from datetime import datetime
 import secrets
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from .auth import get_current_tenant
 from .database import Base, engine, get_db
 from .models import ActivationCode, Alert, Device, Tenant
 from .schemas import (
@@ -37,7 +38,7 @@ def activate(payload: ActivateRequest, db: Session = Depends(get_db)) -> Activat
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code expired")
 
     token = secrets.token_urlsafe(32)
-    tenant = Tenant(api_token=token, active=1, paid_until=None)
+    tenant = Tenant(api_token=token, active=True, paid_until=None)
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
@@ -52,13 +53,18 @@ def activate(payload: ActivateRequest, db: Session = Depends(get_db)) -> Activat
 @router.post("/device/register", response_model=DeviceResponse)
 def register_device(
     payload: DeviceRegisterRequest,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> DeviceResponse:
-    device = db.query(Device).filter(Device.fcm_token == payload.fcm_token).first()
+    device = (
+        db.query(Device)
+        .filter(Device.fcm_token == payload.fcm_token, Device.tenant_id == tenant.id)
+        .first()
+    )
     if device:
         device.name = payload.name
     else:
-        device = Device(fcm_token=payload.fcm_token, name=payload.name)
+        device = Device(tenant_id=tenant.id, fcm_token=payload.fcm_token, name=payload.name)
         db.add(device)
     db.commit()
     db.refresh(device)
@@ -77,6 +83,8 @@ def create_alert(
     db: Session = Depends(get_db),
 ) -> AlertResponse:
     alert = Alert(
+        # для MVP tenant_id можна передавати окремо (пізніше зробимо service-token або auth)
+        tenant_id=getattr(payload, "tenant_id", None),
         camera_id=payload.camera_id,
         threat_type=payload.threat_type,
         detected_at=payload.detected_at,
@@ -97,9 +105,10 @@ def list_alerts(
     threat_type: Optional[str] = None,
     status: Optional[str] = None,
     camera_id: Optional[int] = None,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> AlertListResponse:
-    query = db.query(Alert)
+    query = db.query(Alert).filter(Alert.tenant_id == tenant.id)
 
     if from_datetime:
         query = query.filter(Alert.detected_at >= from_datetime)
@@ -119,9 +128,10 @@ def list_alerts(
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)
 def get_alert(
     alert_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> AlertResponse:
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    alert = db.query(Alert).filter(Alert.id == alert_id, Alert.tenant_id == tenant.id).first()
     if not alert:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -133,9 +143,10 @@ def get_alert(
 @router.get("/alerts/{alert_id}/video")
 def get_alert_video(
     alert_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ):
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    alert = db.query(Alert).filter(Alert.id == alert_id, Alert.tenant_id == tenant.id).first()
     if not alert:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
