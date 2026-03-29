@@ -57,3 +57,25 @@ class ActivateResponse(BaseModel):
     active: bool
     paid_until: Optional[datetime] = None
 
+
+class CameraCreateRequest(BaseModel):
+    name: str
+    location: Optional[str] = None
+    is_active: Optional[bool] = True
+
+
+class CameraResponse(BaseModel):
+    id: int
+    tenant_id: Optional[int] = None
+    name: str
+    location: Optional[str] = None
+    is_active: bool
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CameraListResponse(BaseModel):
+    cameras: List[CameraResponse]
+

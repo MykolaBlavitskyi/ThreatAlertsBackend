@@ -9,6 +9,7 @@ class Camera(Base):
     __tablename__ = "cameras"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
     name = Column(String, nullable=False, default="Camera")
     location = Column(String, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)

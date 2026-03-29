@@ -10,13 +10,16 @@ from sqlalchemy.orm import Session
 
 from .auth import get_current_tenant, get_optional_tenant
 from .database import Base, engine, get_db
-from .models import ActivationCode, Alert, Device, Tenant
+from .models import ActivationCode, Alert, Camera, Device, Tenant
 from .schemas import (
     ActivateRequest,
     ActivateResponse,
     AlertCreateRequest,
     AlertListResponse,
     AlertResponse,
+    CameraCreateRequest,
+    CameraListResponse,
+    CameraResponse,
     DeviceRegisterRequest,
     DeviceResponse,
 )
@@ -25,6 +28,33 @@ from .schemas import (
 Base.metadata.create_all(bind=engine)
 
 router = APIRouter()
+
+
+@router.post("/cameras", response_model=CameraResponse, status_code=status.HTTP_201_CREATED)
+def create_camera(
+    payload: CameraCreateRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> CameraResponse:
+    cam = Camera(
+        tenant_id=tenant.id,
+        name=payload.name.strip(),
+        location=payload.location,
+        is_active=True if payload.is_active is None else payload.is_active,
+    )
+    db.add(cam)
+    db.commit()
+    db.refresh(cam)
+    return cam
+
+
+@router.get("/cameras", response_model=CameraListResponse)
+def list_cameras(
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> CameraListResponse:
+    cameras = db.query(Camera).filter(Camera.tenant_id == tenant.id).order_by(Camera.id.asc()).all()
+    return CameraListResponse(cameras=cameras)
 
 
 @router.post("/activate", response_model=ActivateResponse)
