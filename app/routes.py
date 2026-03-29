@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -34,7 +34,8 @@ def activate(payload: ActivateRequest, db: Session = Depends(get_db)) -> Activat
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid code")
     if code.used_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code already used")
-    if code.expires_at < datetime.utcnow():
+    now = datetime.now(timezone.utc)
+    if code.expires_at < now:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code expired")
 
     token = secrets.token_urlsafe(32)
@@ -43,7 +44,7 @@ def activate(payload: ActivateRequest, db: Session = Depends(get_db)) -> Activat
     db.commit()
     db.refresh(tenant)
 
-    code.used_at = datetime.utcnow()
+    code.used_at = now
     code.tenant_id = tenant.id
     db.commit()
 

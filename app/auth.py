@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -36,7 +36,8 @@ def get_current_tenant(
             detail="Inactive tenant",
         )
 
-    if tenant.paid_until and tenant.paid_until < datetime.utcnow():
+    now = datetime.now(timezone.utc)
+    if tenant.paid_until and tenant.paid_until < now:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Subscription expired",

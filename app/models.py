@@ -11,18 +11,18 @@ class Tenant(Base):
     id = Column(Integer, primary_key=True, index=True)
     api_token = Column(String, unique=True, index=True, nullable=False)
     active = Column(Boolean, nullable=False, default=True)
-    paid_until = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    paid_until = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
 class ActivationCode(Base):
     __tablename__ = "activation_codes"
 
     code = Column(String, primary_key=True)
-    expires_at = Column(DateTime, nullable=False)
-    used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
 class Device(Base):
@@ -32,7 +32,7 @@ class Device(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
     fcm_token = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
 class Alert(Base):
@@ -42,9 +42,9 @@ class Alert(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
     camera_id = Column(Integer, ForeignKey("cameras.id", ondelete="SET NULL"), nullable=True)
     threat_type = Column(String, index=True, nullable=False)
-    detected_at = Column(DateTime, nullable=False)
+    detected_at = Column(DateTime(timezone=True), nullable=False)
     video_path = Column(String, nullable=False)
     preview_image_path = Column(String, nullable=True)
     status = Column(String, nullable=False, default="new")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
