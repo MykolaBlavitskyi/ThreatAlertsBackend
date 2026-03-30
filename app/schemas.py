@@ -124,3 +124,22 @@ class DeviceAdminItem(BaseModel):
 class DeviceAdminListResponse(BaseModel):
     devices: List[DeviceAdminItem]
 
+
+class AlertAdminItem(BaseModel):
+    id: int
+    tenant_id: Optional[int] = None
+    camera_id: Optional[int] = None
+    threat_type: str
+    detected_at: datetime
+    video_path: str
+    preview_image_path: Optional[str] = None
+    status: Optional[str] = "new"
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AlertAdminListResponse(BaseModel):
+    alerts: List[AlertAdminItem]
+

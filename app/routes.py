@@ -16,6 +16,7 @@ from .schemas import (
     ActivateRequest,
     ActivateResponse,
     ActivationCodeAdminListResponse,
+    AlertAdminListResponse,
     AlertCreateRequest,
     AlertListResponse,
     AlertResponse,
@@ -280,4 +281,10 @@ def admin_list_devices(db: Session = Depends(get_db)) -> DeviceAdminListResponse
 def list_devices_alias(db: Session = Depends(get_db)) -> DeviceAdminListResponse:
     """Той самий JSON, що /api/admin/devices — для fallback у фронті."""
     return _list_all_devices(db)
+
+
+@router.get("/admin/alerts", response_model=AlertAdminListResponse)
+def admin_list_alerts(db: Session = Depends(get_db)) -> AlertAdminListResponse:
+    alerts = db.query(Alert).order_by(Alert.detected_at.desc()).all()
+    return AlertAdminListResponse(alerts=alerts)
 
