@@ -18,6 +18,7 @@ from .schemas import (
     ActivationCodeAdminItem,
     ActivationCodeAdminListResponse,
     ActivationCodeAdminUpdateRequest,
+    ActivationCodeCreateRequest,
     ActivationCodeDeleteRequest,
     AlertAdminListResponse,
     AlertCreateRequest,
@@ -362,6 +363,73 @@ def admin_list_activation_codes(
 ) -> ActivationCodeAdminListResponse:
     rows = db.query(ActivationCode).order_by(ActivationCode.created_at.desc()).all()
     return ActivationCodeAdminListResponse(activation_codes=rows)
+
+
+def _generate_unique_activation_code(db: Session) -> str:
+    for _ in range(32):
+        candidate = f"ACT-{secrets.token_hex(4).upper()}"
+        if db.query(ActivationCode.code).filter(ActivationCode.code == candidate).first() is None:
+            return candidate
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Could not generate unique activation code",
+    )
+
+
+@router.post(
+    "/admin/activation-codes",
+    response_model=ActivationCodeAdminItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/activation-codes",
+    response_model=ActivationCodeAdminItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/activation_codes",
+    response_model=ActivationCodeAdminItem,
+    status_code=status.HTTP_201_CREATED,
+)
+def admin_create_activation_code(
+    payload: ActivationCodeCreateRequest,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> ActivationCodeAdminItem:
+    tid = payload.tenant_id
+    if tid == 0:
+        tid = None
+    if tid is not None:
+        if not db.query(Tenant).filter(Tenant.id == tid).first():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid tenant_id",
+            )
+
+    if payload.code is not None:
+        code_value = payload.code.strip()
+        if not code_value:
+            code_value = _generate_unique_activation_code(db)
+    else:
+        code_value = _generate_unique_activation_code(db)
+
+    row = ActivationCode(
+        code=code_value,
+        expires_at=payload.expires_at,
+        used_at=None,
+        tenant_id=tid,
+    )
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Activation code already exists",
+        )
+    db.refresh(row)
+    return row
 
 
 def _delete_activation_code(db: Session, raw_code: str) -> None:

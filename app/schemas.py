@@ -159,6 +159,14 @@ class ActivationCodeDeleteRequest(BaseModel):
     code: str
 
 
+class ActivationCodeCreateRequest(BaseModel):
+    """Тіло POST /api/admin/activation-codes — створення коду активації."""
+
+    expires_at: datetime
+    code: Optional[str] = None
+    tenant_id: Optional[int] = None
+
+
 class CameraUpdateRequest(BaseModel):
     name: Optional[str] = None
     location: Optional[str] = None
