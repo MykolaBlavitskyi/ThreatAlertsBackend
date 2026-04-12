@@ -545,12 +545,27 @@ def list_devices_alias(
 
 
 @router.delete("/admin/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-@router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 def admin_delete_device(
+    device_id: int,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Адмін: видалити пристрій будь-якого tenant (як у GET /api/admin/devices)."""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    db.delete(device)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_device_tenant_scoped(
     device_id: int,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> Response:
+    """Fallback: видалити лише пристрій поточного tenant."""
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
