@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,10 @@ from .push import send_alert_push
 from .schemas import (
     ActivateRequest,
     ActivateResponse,
+    ActivationCodeAdminItem,
     ActivationCodeAdminListResponse,
+    ActivationCodeAdminUpdateRequest,
+    ActivationCodeDeleteRequest,
     AlertAdminListResponse,
     AlertCreateRequest,
     AlertListResponse,
@@ -23,10 +26,13 @@ from .schemas import (
     CameraCreateRequest,
     CameraListResponse,
     CameraResponse,
+    CameraUpdateRequest,
     DeviceAdminListResponse,
     DeviceRegisterRequest,
     DeviceResponse,
+    TenantAdminItem,
     TenantAdminListResponse,
+    TenantAdminUpdateRequest,
 )
 
 
@@ -60,6 +66,41 @@ def list_cameras(
 ) -> CameraListResponse:
     cameras = db.query(Camera).filter(Camera.tenant_id == tenant.id).order_by(Camera.id.asc()).all()
     return CameraListResponse(cameras=cameras)
+
+
+@router.patch("/cameras/{camera_id}", response_model=CameraResponse)
+def update_camera(
+    camera_id: int,
+    payload: CameraUpdateRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> CameraResponse:
+    cam = db.query(Camera).filter(Camera.id == camera_id, Camera.tenant_id == tenant.id).first()
+    if not cam:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+    if payload.name is not None:
+        cam.name = payload.name.strip()
+    if payload.location is not None:
+        cam.location = payload.location
+    if payload.is_active is not None:
+        cam.is_active = payload.is_active
+    db.commit()
+    db.refresh(cam)
+    return cam
+
+
+@router.delete("/cameras/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_camera(
+    camera_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    cam = db.query(Camera).filter(Camera.id == camera_id, Camera.tenant_id == tenant.id).first()
+    if not cam:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+    db.delete(cam)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/activate", response_model=ActivateResponse)
@@ -255,16 +296,162 @@ def get_alert_video(
     )
 
 
+@router.delete("/alerts/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_alert(
+    alert_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    alert = db.query(Alert).filter(Alert.id == alert_id, Alert.tenant_id == tenant.id).first()
+    if not alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    db.delete(alert)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Admin (потрібен Authorization: Bearer <api_token>) ---
+
+
 @router.get("/admin/tenants", response_model=TenantAdminListResponse)
-def admin_list_tenants(db: Session = Depends(get_db)) -> TenantAdminListResponse:
+def admin_list_tenants(
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> TenantAdminListResponse:
     rows = db.query(Tenant).order_by(Tenant.id.asc()).all()
     return TenantAdminListResponse(tenants=rows)
 
 
+@router.patch("/admin/tenants/{tenant_id}", response_model=TenantAdminItem)
+def admin_patch_tenant(
+    tenant_id: int,
+    payload: TenantAdminUpdateRequest,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> TenantAdminItem:
+    t = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not t:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+    if payload.active is not None:
+        t.active = payload.active
+    if payload.paid_until is not None:
+        t.paid_until = payload.paid_until
+    db.commit()
+    db.refresh(t)
+    return t
+
+
+@router.delete("/admin/tenants/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_tenant(
+    tenant_id: int,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    t = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not t:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+    db.delete(t)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/admin/activation-codes", response_model=ActivationCodeAdminListResponse)
-def admin_list_activation_codes(db: Session = Depends(get_db)) -> ActivationCodeAdminListResponse:
+def admin_list_activation_codes(
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> ActivationCodeAdminListResponse:
     rows = db.query(ActivationCode).order_by(ActivationCode.created_at.desc()).all()
     return ActivationCodeAdminListResponse(activation_codes=rows)
+
+
+def _delete_activation_code(db: Session, raw_code: str) -> None:
+    code_value = raw_code.strip()
+    row = db.query(ActivationCode).filter(ActivationCode.code == code_value).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activation code not found")
+    db.delete(row)
+    db.commit()
+
+
+@router.post(
+    "/admin/activation-codes/delete",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def admin_delete_activation_code_post(
+    payload: ActivationCodeDeleteRequest,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    _delete_activation_code(db, payload.code)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/admin/activation-codes/remove",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def admin_remove_activation_code_post(
+    payload: ActivationCodeDeleteRequest,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    _delete_activation_code(db, payload.code)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/admin/activation-codes/revoke",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def admin_revoke_activation_code_post(
+    payload: ActivationCodeDeleteRequest,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    _delete_activation_code(db, payload.code)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/admin/activation-codes", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_activation_code_query(
+    code: str = Query(..., description="Activation code to delete"),
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    _delete_activation_code(db, code)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/admin/activation-codes/{code}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_activation_code_path(
+    code: str,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    _delete_activation_code(db, code)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/admin/activation-codes/{code}", response_model=ActivationCodeAdminItem)
+def admin_patch_activation_code(
+    code: str,
+    payload: ActivationCodeAdminUpdateRequest,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> ActivationCodeAdminItem:
+    code_value = code.strip()
+    row = db.query(ActivationCode).filter(ActivationCode.code == code_value).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activation code not found")
+    if payload.expires_at is not None:
+        row.expires_at = payload.expires_at
+    if payload.used_at is not None:
+        row.used_at = payload.used_at
+    if payload.tenant_id is not None:
+        row.tenant_id = payload.tenant_id
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def _list_all_devices(db: Session) -> DeviceAdminListResponse:
@@ -273,18 +460,66 @@ def _list_all_devices(db: Session) -> DeviceAdminListResponse:
 
 
 @router.get("/admin/devices", response_model=DeviceAdminListResponse)
-def admin_list_devices(db: Session = Depends(get_db)) -> DeviceAdminListResponse:
+def admin_list_devices(
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> DeviceAdminListResponse:
     return _list_all_devices(db)
 
 
 @router.get("/devices", response_model=DeviceAdminListResponse)
-def list_devices_alias(db: Session = Depends(get_db)) -> DeviceAdminListResponse:
+def list_devices_alias(
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> DeviceAdminListResponse:
     """Той самий JSON, що /api/admin/devices — для fallback у фронті."""
     return _list_all_devices(db)
 
 
+@router.delete("/admin/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_device(
+    device_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> Response:
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    if device.tenant_id != tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Device does not belong to this tenant",
+        )
+    db.delete(device)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/admin/alerts", response_model=AlertAdminListResponse)
-def admin_list_alerts(db: Session = Depends(get_db)) -> AlertAdminListResponse:
-    alerts = db.query(Alert).order_by(Alert.detected_at.desc()).all()
+def admin_list_alerts(
+    from_datetime: Optional[datetime] = None,
+    to_datetime: Optional[datetime] = None,
+    threat_type: Optional[str] = None,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    camera_id: Optional[int] = None,
+    tenant_id: Optional[int] = Query(None, description="Filter by tenant (admin)"),
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> AlertAdminListResponse:
+    query = db.query(Alert)
+    if tenant_id is not None:
+        query = query.filter(Alert.tenant_id == tenant_id)
+    if from_datetime:
+        query = query.filter(Alert.detected_at >= from_datetime)
+    if to_datetime:
+        query = query.filter(Alert.detected_at <= to_datetime)
+    if threat_type:
+        query = query.filter(Alert.threat_type == threat_type)
+    if status_filter:
+        query = query.filter(Alert.status == status_filter)
+    if camera_id is not None:
+        query = query.filter(Alert.camera_id == camera_id)
+    alerts = query.order_by(Alert.detected_at.desc()).all()
     return AlertAdminListResponse(alerts=alerts)
 

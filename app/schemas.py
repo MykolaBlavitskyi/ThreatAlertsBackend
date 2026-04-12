@@ -143,3 +143,24 @@ class AlertAdminItem(BaseModel):
 class AlertAdminListResponse(BaseModel):
     alerts: List[AlertAdminItem]
 
+
+class TenantAdminUpdateRequest(BaseModel):
+    active: Optional[bool] = None
+    paid_until: Optional[datetime] = None
+
+
+class ActivationCodeAdminUpdateRequest(BaseModel):
+    expires_at: Optional[datetime] = None
+    used_at: Optional[datetime] = None
+    tenant_id: Optional[int] = None
+
+
+class ActivationCodeDeleteRequest(BaseModel):
+    code: str
+
+
+class CameraUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    location: Optional[str] = None
+    is_active: Optional[bool] = None
+
