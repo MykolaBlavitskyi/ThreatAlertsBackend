@@ -21,6 +21,7 @@ from .schemas import (
     ActivationCodeCreateRequest,
     ActivationCodeDeleteRequest,
     AlertAdminListResponse,
+    AlertStatusUpdateRequest,
     AlertCreateRequest,
     AlertListResponse,
     AlertResponse,
@@ -309,6 +310,22 @@ def delete_alert(
     db.delete(alert)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/alerts/{alert_id}", response_model=AlertResponse)
+def patch_alert_status(
+    alert_id: int,
+    payload: AlertStatusUpdateRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> AlertResponse:
+    alert = db.query(Alert).filter(Alert.id == alert_id, Alert.tenant_id == tenant.id).first()
+    if not alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    alert.status = payload.status
+    db.commit()
+    db.refresh(alert)
+    return alert
 
 
 # --- Admin (потрібен Authorization: Bearer <api_token>) ---
@@ -605,4 +622,20 @@ def admin_list_alerts(
         query = query.filter(Alert.camera_id == camera_id)
     alerts = query.order_by(Alert.detected_at.desc()).all()
     return AlertAdminListResponse(alerts=alerts)
+
+
+@router.patch("/admin/alerts/{alert_id}", response_model=AlertResponse)
+def admin_patch_alert_status(
+    alert_id: int,
+    payload: AlertStatusUpdateRequest,
+    _tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> AlertResponse:
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    alert.status = payload.status
+    db.commit()
+    db.refresh(alert)
+    return alert
 

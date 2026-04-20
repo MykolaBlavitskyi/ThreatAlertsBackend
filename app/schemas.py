@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -142,6 +142,10 @@ class AlertAdminItem(BaseModel):
 
 class AlertAdminListResponse(BaseModel):
     alerts: List[AlertAdminItem]
+
+
+class AlertStatusUpdateRequest(BaseModel):
+    status: Literal["new", "acknowledged", "resolved"]
 
 
 class TenantAdminUpdateRequest(BaseModel):
