@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .auth import get_current_tenant, get_optional_tenant
+from .auth import get_current_tenant, get_current_tenant_for_video, get_optional_tenant
 from .database import Base, engine, get_db
 from .models import ActivationCode, Alert, Camera, Device, Tenant
 from .push import send_alert_push
@@ -326,7 +326,7 @@ def get_alert(
 @router.get("/alerts/{alert_id}/video")
 def get_alert_video(
     alert_id: int,
-    tenant: Tenant = Depends(get_current_tenant),
+    tenant: Tenant = Depends(get_current_tenant_for_video),
     db: Session = Depends(get_db),
 ):
     alert = db.query(Alert).filter(Alert.id == alert_id, Alert.tenant_id == tenant.id).first()

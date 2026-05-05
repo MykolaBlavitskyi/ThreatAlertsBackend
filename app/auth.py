@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,45 @@ def get_current_tenant(
 
     token = creds.credentials
     tenant = db.query(Tenant).filter(Tenant.api_token == token).first()
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    if not tenant.active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive tenant",
+        )
+
+    now = datetime.now(timezone.utc)
+    if tenant.paid_until and tenant.paid_until < now:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Subscription expired",
+        )
+
+    return tenant
+
+
+def get_current_tenant_for_video(
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    token: Optional[str] = Query(
+        None,
+        description="Той самий api_token, якщо <video> не може передати Bearer (краще — fetch+blob на фронті).",
+    ),
+    db: Session = Depends(get_db),
+) -> Tenant:
+    """Bearer або query ?token= (для відтворення в <video src=...>)."""
+    raw = (creds.credentials if creds and creds.credentials else None) or token
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing token",
+        )
+
+    tenant = db.query(Tenant).filter(Tenant.api_token == raw).first()
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
