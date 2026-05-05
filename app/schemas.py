@@ -148,6 +148,14 @@ class AlertStatusUpdateRequest(BaseModel):
     status: Literal["new", "acknowledged", "resolved"]
 
 
+class AlertVideoUploadResponse(BaseModel):
+    """Відповідь POST /api/alerts/upload — шлях для подальшого POST /api/alerts."""
+
+    video_path: str
+    path: str
+    url: Optional[str] = None
+
+
 class TenantAdminUpdateRequest(BaseModel):
     active: Optional[bool] = None
     paid_until: Optional[datetime] = None

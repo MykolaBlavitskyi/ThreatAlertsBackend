@@ -1,9 +1,10 @@
 import secrets
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ from .schemas import (
     ActivationCodeDeleteRequest,
     AlertAdminListResponse,
     AlertStatusUpdateRequest,
+    AlertVideoUploadResponse,
     AlertCreateRequest,
     AlertListResponse,
     AlertResponse,
@@ -222,6 +224,60 @@ def create_alert(
             detected_at_iso=alert.detected_at.isoformat(),
         )
     return alert
+
+
+_MAX_CLIP_BYTES = 200 * 1024 * 1024
+
+
+@router.post(
+    "/alerts/upload",
+    response_model=AlertVideoUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_alert_clip(
+    file: UploadFile = File(..., description="Video clip (mp4/mov/webm)"),
+    tenant: Tenant = Depends(get_current_tenant),
+) -> AlertVideoUploadResponse:
+    """
+    Зберігає файл на диск у clips/tenant_{id}/... і повертає відносний video_path
+    для POST /api/alerts (те саме, що очікує GET .../video).
+    """
+    uploads_dir = Path(__file__).resolve().parents[1] / "clips" / f"tenant_{tenant.id}"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    orig = Path(file.filename or "clip.bin")
+    suffix = orig.suffix.lower()
+    if suffix not in (".mp4", ".webm", ".mpeg", ".mov", ".mkv"):
+        suffix = ".mp4"
+    fname = f"{uuid.uuid4().hex}{suffix}"
+    dest = uploads_dir / fname
+
+    total = 0
+    try:
+        with dest.open("wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > _MAX_CLIP_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=f"File too large (max {_MAX_CLIP_BYTES // (1024 * 1024)} MB)",
+                    )
+                out.write(chunk)
+    except HTTPException:
+        dest.unlink(missing_ok=True)
+        raise
+    except OSError as exc:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not save file: {exc}",
+        ) from exc
+
+    rel = str(Path("clips") / f"tenant_{tenant.id}" / fname).replace("\\", "/")
+    return AlertVideoUploadResponse(video_path=rel, path=rel, url=None)
 
 
 @router.get("/alerts", response_model=AlertListResponse)
